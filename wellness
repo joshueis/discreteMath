@@ -1,0 +1,4 @@
+#!/bin/sh
+
+ARGS="$@" emacs -Q -batch -L ~/.emacs.d/private -l wellness.el -f test-rsa #2> /dev/null
+

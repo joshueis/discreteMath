@@ -1,0 +1,4 @@
+#!/bin/sh
+
+ARGS="$@" emacs -Q -batch -L ~/.emacs.d/private -l explore.el -f coolness #2> /dev/null
+

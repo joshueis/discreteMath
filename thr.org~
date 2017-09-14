@@ -1,0 +1,472 @@
+#+TITLE: Awareness
+#+AUTHOR: Israel Carvajal, sample code by Rick Neff
+#+EMAIL:  car14040@byui.edu
+
+* Awareness Sample Code
+
+  Use the following code block as a guide and a starting point for
+  your exploration:
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+
+  (require 'cl)
+  (require 'url)
+  (require 'eww)
+
+  (defvar *first-graph-number* 1
+    "The first graph number to test. See the test-all function.")
+
+  (defvar *last-graph-number* 3
+    "The last graph number to test. See the test-all function.")
+
+  (defvar *graph* 'graph
+    "The current graph symbol, set to avoid passing it around everywhere.")
+
+  (defun get-graph-symbol (graph-number)
+    "The graph symbol is the interned symbol 'graph-n for n (the graph-number)
+     between 1 and 6."
+    (case graph-number
+      ((1 2 3 4 5 6) (intern (format "graph-%d" graph-number)))
+      (t 'graph)))
+
+  (defun get-graph (&optional alt)
+    "Get the current graph symbol. Alternatively, if alt is supplied
+     and is an integer, get the alt-numbered graph using the helper
+     function retrieve-graph-and-check-success and return the graph's
+     symbol-plist representation.
+     See functions graph-n for n in [1 2 3 4 5 6]."
+    (if (null alt) *graph*
+      (let* ((graph-number (if (integerp alt) alt 1))
+             (graph-symbol (get-graph-symbol graph-number)))
+        (or (symbol-plist graph-symbol)
+            (and (retrieve-graph-and-check-success graph-number)
+                 (symbol-plist graph-symbol))))))
+
+  (defun set-graph (graph-number)
+    "Set the current graph symbol."
+    (setq *graph* (get-graph-symbol graph-number)))
+
+  (defun get-graph-edges ()
+    "Get the graph edges by graph symbol property list lookup of the :edges key."
+    (get *graph* :edges))
+
+  (defun get-graph-nodes ()
+    "Get the graph nodes by graph symbol property list lookup of the :nodes key."
+    (get *graph* :nodes))
+
+  (defun get-graph-adjacencies ()
+    "Get the graph adjacencies by graph symbol property list lookup of the :adjacencies key."
+    (get *graph* :adjacencies))
+
+  (defun get-adjacency-list (node)
+    "Get the adjacency list of the given node by looking up its association
+     in the graph's adjacencies (list of node adjacency lists)."
+    (assoc node (get-graph-adjacencies)))
+
+  (defun init-graph ()
+    "Initialize a graph by first initializing its nodes
+     and then initializing its adjacencies (caching both results)."
+    (or (get *graph* :nodes)
+        (put *graph* :nodes (init-graph-nodes)))
+    (or (get *graph* :adjacencies)
+        (put *graph* :adjacencies (make-adjacency-lists (get-graph-edges)))))
+
+  (defun init-graph-nodes ()
+    "Initialize graph nodes by scanning its edges and pushing both first and second nodes onto
+     a node list (if not already there). The list of nodes is reversed and returned."
+    (let* ((nodes nil))
+      (dolist (edge (get-graph-edges))
+        (pushnew (car edge) nodes)
+        (pushnew (cdr edge) nodes))
+      (nreverse nodes)))
+
+  (defun make-adjacency-list (node edges)
+    "Make the adjacency list of a node by collecting all the nodes it's connected to in edges."
+    (loop for edge in edges
+          if (= node (car edge))
+          collect (cdr edge)))
+
+  (defun make-adjacency-list-in-reverse (node edges)
+    "Make the reverse adjacency list of a node by collecting all the nodes connected to it in edges."
+    (loop for edge in edges
+          if (= node (cdr edge))
+          collect (car edge)))
+
+  (defun make-adjacency-lists (edges)
+    "Make adjacency lists given a graph's edges by collecting the adjacency lists and reverse adjacency lists
+     for each of the graph's nodes, removing any duplicates found."
+    (let ((alists nil))
+      (dolist (node (get-graph-nodes))
+        (setq alists (nconc alists
+                            (list (cons node (remove-duplicates
+                                              (nconc (make-adjacency-list node edges)
+                                                     (make-adjacency-list-in-reverse node edges))))))))
+      alists))
+
+  (defun show-graph ()
+    "Show a graph by printing its edges one per line
+     followed by its per-node adjacency lists, one per line."
+    (dolist (edge (get-graph-edges))
+      (princ (format "%s\n" edge)))
+    (dolist (node (get-graph-nodes))
+      (princ (format "%d --> %s\n" node (cdr (get-adjacency-list node))))))
+
+  (defun contains-edge (node1 node2)
+    "Does the graph contain an edge between node1 and node2?"
+    (not (null (or (memq node2 (get-adjacency-list node1))
+                   (memq node1 (get-adjacency-list node2))))))
+
+  ;; TODO Flesh out this function, using any helper functions you can find or write.
+  (defun check-clique-or-anti-clique (anti nodes)
+    "Checks if the graph contains a clique (if anti is nil)
+     or an anti-clique (if anti is t) formed by the given nodes."
+    t)
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;;                                                                        ;;
+  ;; TODO *DO NOT* change any code below!                                   ;;
+  ;;                                                                        ;;
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  (defun output-results(graph-number does anti nodes)
+    "Outputs the results of a test of a given numbered graph."
+    (princ "Graph ")
+    (princ graph-number)
+    (princ (if does " does" " DOES NOT"))
+    (princ " contain a")
+    (princ (if anti "n anti-" " "))
+    (princ "clique of size ")
+    (princ (length nodes))
+    (princ " with vertices\n")
+    (dolist (node nodes)
+      (princ node)
+      (princ " "))
+    (princ "\n\n"))
+
+  (defun check-and-output (graph-number anti nodes expected)
+    "Calls check-clique-or-anti-clique and outputs the results
+     if the actual equals the expected, otherwise an error message."
+    (set-graph graph-number) ; so check-clique-or-anti-clique works for all
+    (let ((actual (check-clique-or-anti-clique anti nodes)))
+      (if (eq actual expected)
+          (output-results graph-number actual anti nodes)
+        (princ (format "Graph %s test on %s failed!\n\n" graph-number nodes)))
+      t))
+
+  (defun test-four (graph-number
+                    anti1 nodes1 does-exist1
+                    anti2 nodes2 does-exist2
+                    anti3 nodes3 does-exist3
+                    anti4 nodes4 does-exist4)
+    "Tests via check-and-output four cases on a given numbered graph."
+      (check-and-output graph-number anti1 nodes1 does-exist1)
+      (check-and-output graph-number anti2 nodes2 does-exist2)
+      (check-and-output graph-number anti3 nodes3 does-exist3)
+      (check-and-output graph-number anti4 nodes4 does-exist4)
+    )
+
+  (defvar *url-path* "http://firstthreeodds.org/cs237/"
+    "Where graph data lives.")
+
+  (defun retrieve-graph-interactive (graph-number)
+    "Retrieves a given numbered graph and displays its edges function in the *eww* buffer."
+    (eww (format "%sgraph-%d.el" *url-path* graph-number)))
+
+  (defun is-graph-retrieved (graph-number)
+    "If the numbered graph was successfully retrieved, its edges function will be defined."
+    (not (null (symbol-function (intern (format "graph-%d-edges" graph-number))))))  
+
+  (defun retrieve-graph (graph-number)
+    "Retrieves a given numbered graph and evaluates its edges function's definition."
+    (with-current-buffer
+        (url-retrieve-synchronously (format "%sgraph-%d.el" *url-path* graph-number))
+      (unwind-protect
+          (when (search-forward "(defun" nil t)
+            (beginning-of-line)
+            (eval-region (point) (point-max))
+            t)
+        (kill-buffer))))
+  (retrieve-graph-interactive 2)
+
+  ;; TODO Understand what this function does and why.
+  (defun graph-1-edges ()
+    (or (get 'graph-1 :edges)
+        (put 'graph-1 :edges '(
+  (1 . 2)
+  (1 . 9)
+  (1 . 10)
+  (1 . 11)
+  (2 . 3)
+  (2 . 4)
+  (2 . 5)
+  (2 . 9)
+  (2 . 10)
+  (2 . 11)
+  (3 . 4)
+  (3 . 10)
+  (3 . 11)
+  (4 . 5)
+  (4 . 10)
+  (4 . 11)
+  (5 . 6)
+  (5 . 7)
+  (5 . 9)
+  (6 . 7)
+  (6 . 9)
+  (7 . 8)
+  (7 . 9)
+  (8 . 10)
+  (8 . 9)
+  (9 . 10)
+  (10 . 11)
+  ))))  
+
+  (defun graph-1 ()
+    (graph-1-edges)
+    (set-graph 1)
+    (init-graph)
+    (get-graph 1))
+
+  ;; TODO Explain why these next five functions differ substantially from graph-1.
+  (defun graph-2 () (get-graph 2))
+  (defun graph-3 () (get-graph 3))
+  (defun graph-4 () (get-graph 4))
+  (defun graph-5 () (get-graph 5))
+  (defun graph-6 () (get-graph 6))
+
+  (defun test-graph (graph-number)
+    "Calls test-four to test four cases for each numbered graph (1-6 are known and hardwired).
+     It first calls the given graph's edges function and initializes the graph."
+    (let* ((clique nil) (anti-clique t) (does-exist t))
+      (case graph-number
+
+        (1 (test-four 1
+            clique '(2 3 4 10 11) does-exist
+            clique '(2 4 5 10 11) (not does-exist)
+            anti-clique '(1 3 5 8) does-exist
+            anti-clique '(4 5 8 11) (not does-exist)))
+
+        (2 (test-four 2
+            clique '(251 417 517) does-exist
+            clique '(414 587 588) does-exist
+            anti-clique '(8 10 14 17 20 49 51 66 74 80 84 109 124 127 129 132 139 141 143 150 154 161 168 177 192 196 200 203 207 215 218 239 259 261 272 278 285 292 298 302 309 312 315 320 338 343 356 368 372 380 391 395 397 402 407 415 418 427 429 434 441 448 458 461 465 470 475 480 482 494 498 512 516 549 560 570 582) does-exist
+            anti-clique '(17 290 129 212 354 497 192 381 389 112 386 341) (not does-exist)))
+
+        (3 (test-four 3
+            clique '(212 320 357 463 690) does-exist
+            clique '(266 606 990 243 11) does-exist
+            anti-clique '(534 787 579 430 849 399 561 798 72 623 422 197 8 336 1001 401 173 862 716 117 17 175 123 317 521 246) does-exist
+            anti-clique '(12 235 198 199 264 345 444 501 672 734 908) (not does-exist)))
+
+        (4 (test-four 4
+            clique '(664 1026 1171) does-exist
+            clique '(838 1184 1055 1480) does-exist
+            anti-clique '(2 4 7 9 12 15 17 20 23 29 33 35 43 48 53 57) (not does-exist)
+            anti-clique '(237 820 1665 301 453 952 1864 710 266 1177 1798 392 339 1492 1652 483 798 745 975 1638 1035 1483 1065 1336 1601 1567 1839 2001 802 1456 434 504 1754 1524 1889 1624 104 1449 1322 1343 88 1118 341 762 1311 599 993 280 288 792 1361) does-exist))
+
+        (5 (test-four 5
+            clique '(791 1516 1938 2233) does-exist
+            clique '(836 2406 2489 583 584) does-exist
+            anti-clique '(911 1014 1665 2297 1363 314 1548 1469 743 622 1408 1288 2228 545 1313 1962 1509 1329 1978 149 1945 1959 552 2069 394 856 1 2171 888 2269 2032 77 2494 646 1214 1381) does-exist
+            anti-clique '(15 18 110 246 314 981) (not does-exist)))
+
+        (6 (test-four 6
+            clique '(157 1995 2059 2060 2165 2511) does-exist
+            clique '(1787 1300 52 2141 1812 1184 695) does-exist
+            anti-clique '(666 848 1861 949 959 1728 1540 1384 1412 2170 2374 260 1519 2417 2342 2738 2492 2233 2041 2799 2628 701 1498 589 2160 396 1223 1962) does-exist
+            anti-clique '(2 7 18 28 45 90 459 571 888 905 1312 1450) (not does-exist)))
+
+        (t (message "No such graph number: %d" graph-number)))))
+
+  (defun retrieve-graph-and-check-success (graph-number)
+    "A helper function for get-graph and retrieve-and-test-graph.
+     Check first if the graph is already retrieved. If so, return t.
+     Otherwise, call retrieve-graph and then initialize the graph
+     by calling the graph edges function, setting the *graph*
+     symbol and calling init-graph. Finally, return the result of
+     calling is-graph-retrieved again."
+    (or (is-graph-retrieved graph-number)
+        (and (retrieve-graph graph-number)
+             (let* ((graph-name (format "graph-%d" graph-number))
+                    (graph-edges-function (intern (concat graph-name "-edges"))))
+               (funcall graph-edges-function)
+               (setq *graph* (intern graph-name))
+               (init-graph))
+             (is-graph-retrieved graph-number))))
+
+  (defun retrieve-and-test-graph (graph-number)
+    "A helper function for test-all. Call retrieve-graph-and-check-success
+     and if t is returned, call test-graph, else display an error message."
+    (if (retrieve-graph-and-check-success graph-number)
+        (test-graph graph-number)
+      (message "Graph %d could not be retrieved." graph-number)))
+
+  (defun test-all ()
+    "Calls helper function retrieve-and-test-graph for each numbered graph
+     from *first-graph-number* to *last-graph-number*."
+    (loop for n from *first-graph-number* to *last-graph-number*
+          do (retrieve-and-test-graph n)))
+
+  (defmacro measure-time (&rest body)
+    "Measure and return the running time of the code in body."
+    (declare (indent defun))
+    (let ((start (make-symbol "start")))
+      `(let ((,start (float-time)))
+         ,@body
+         (- (float-time) ,start))))
+#+END_SRC
+
+* What Is True?
+
+  The following code block is a self-assesssment tool that allows you
+  to use "fuzzy logic" (truth values from 0 to 100) on SOME but not
+  ALL assertions. Some assertions are the standard boolean logic: true
+  (100) or false (0), but no value in between. (In other words, you
+  either did it or you didn't.)
+
+#+BEGIN_SRC emacs-lisp :tangle yes
+(defun what-is-true-about-my-engagement-with-awareness ()
+  "If need be, replace a 100 with a smaller number to reflect how much you feel you deserve."
+  (vector
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; What is true of my experience in general?                              ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["I had fun." 100]
+["I collaborated with one or more classmates." 100]
+["I learned something new." 100]
+["I achieved something meaningful, or something I can build upon at a later time." 100]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; What is true of my report on what I learned?                            ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["I wrote it using emacs 'org' mode." 100] ; 0 or 100
+["I submitted it successfully and saw my score." 100] ; 0 or 100
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; What is true of the mechanical "infelicities" (misspelled words,        ;;
+;; grammatical errors, punctuation errors) in my report of what I learned? ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["There are fewer than four." 100]
+["There are fewer than three." 100]
+["There are fewer than two." 100]
+["There are none." 0]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; What is true about the correctness and completeness of my code?         ;;
+;; (How well did I do the TODOs, and does my code pass all tests?)         ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+["I correctly fleshed out the check-clique-or-anti-clique function." 0]
+["I DID NOT change any of the code at the bottom (starting with output-results)." 100]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; What is true about the efficiency of my code?                           ;;
+;; (For the assertions that start with "I made"                            ;;
+;;  you are allowed to change the retrieve-graph function.)                ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["All four tests for graphs 1-3 complete in less than 10 seconds." 0] ; 0 or 100
+["All four tests for graphs 1-4 complete in less than 15 seconds." 0] ; 0 or 100
+["All four tests for graphs 1-5 complete in less than 20 seconds." 0] ; 0 or 100
+["All four tests for all six graphs complete in less than 25 seconds." 100] ; 0 or 100
+["I made and documented changes/improvements to the code such that all four tests for graphs 1-3 complete in less than 1 second." 0] ; 0 or 100
+["I made and documented changes/improvements to the code such that all four tests for graphs 1-4 complete in less than 2 seconds." 0] ; 0 or 100
+["I made and documented changes/improvements to the code such that all four tests for graphs 1-5 complete in less than 3 seconds." 0] ; 0 or 100
+["I made and documented changes/improvements to the code such that all four tests for all six graphs complete in less than 4 seconds." 0] ; 0 or 100
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; What is true about the elegance of my code?                             ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["It has some by virtue of its correctness, as first and foremost, an elegant solution is a correct solution." 0]
+["It increases by means of helper functions that increase cohesion, and minimize the complexity of the logic." 0]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; What is true about the depth of my understanding of the supplied code?  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["It is shallow, but at least I understand *how* it works." 100]
+["It goes much deeper by virtue of my figuring out *why* it works." 100]
+["I can explain why the graph-[2-6] functions differ substantially from graph-1." 100]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; How well did I master the basic terminology and operations of logic,    ;;
+;; sets, functions, and graphs?                                            ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["I described how well with more than zero sentences in my report." 100]
+["I described how well with more than one Good sentence in my report." 100]
+["I described how well with more than two GREAT sentences in my report." 100]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; How well did I demonstrate logical reasoning through solving problems?  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["I described how well with more than zero sentences in my report." 100]
+["I described how well with more than one Good sentence in my report." 100]
+["I described how well with more than two GREAT sentences in my report." 100]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; How well did I interpret the meaning of mathematical statements in the  ;;
+;; context of real-world applications?                                     ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+["I described how well with more than zero sentences in my report." 100]
+["I described how well with more than one Good sentence in my report." 100]
+["I described how well with more than two GREAT sentences in my report." 100]
+))
+#+END_SRC
+  
+* Report
+  I was not able to succed in this exploration. Awareness took me more time that I thought. 
+  Supplied Code
+  I do undestand what the code is doing.
+  The difference between graph-[2-6] and graph-1 is that graph-1 is defined and declared
+  in the code file while the rest of the graphs are retrieved from your server. 
+  
+  Terminology - operations of logic, sets, functions, and graphs.
+  I think that I acquired a good understanding of logic operations, sets, functions, 
+  and graphs. 
+  Logic is all around us and programming is based on it. It is program’s foundations.
+  Life is based on logic and because of prepositional logic, we are able to translate our 
+  continuous and analog world to a digital and discrete one. 
+  Lets look at an example of using logic, one that we are familiarized with:  
+  our car’s seatbelt. 
+  Based on prepositional logic, this basic system has the following behavior: 
+  if the engine is on & the seatbelt is not buckled & the timer has reached its time limit, 
+  then we start listening to that beep as a reminder of using it.
+ 
+  Jumping to the graph subject, to make this report less wordy, 
+  I learned that graphs explain relationships between elements and that they can be used almost
+  everywhere. 
+  In fact, I cannot find a case were we couldn’t use them; even if there is not a relationship
+  between them we could have two nodes without connecting edges put perhaps just self-loops.  
+  When I was working on coolness, I enjoyed building my predicate thinking on graph theory. 
+  My predicate finds if a flight was available from a given place and a given destination. 
+  Thinking about graph theory and directed graphs, this travel agency or airport scenario really
+  helped me better understand their usage and how effective it is to have a way of representing
+  them in a non graphical way. 
+  I like how the explorations were built upon each other, coolness allowed me to deal for the
+  first time with the Universal Quantifiers, wellness provided the opportunity of, 
+  learning much more about elisp syntax and its functions, and apply the acquired knowledge 
+  of number theory. Finally awareness provided the opportunity of applying everything learned 
+  during the whole semester. 
+  The code consisted on finding a sub-graph in a graph, providing a sub-set of nodes. 
+  The function would analyze the adjacency list of the respective graph and find out 
+  if the given nodes were a complete graph, or a clique. 
+  To accomplish this, the for-all-for-all function written in the previous exploration 
+  is to be used, the predicate for FAA needs to be the contain-edge function, 
+  and it would traverse the adjacency list. 
+  
+  Logical Reasoning
+  Making connections between mathematical theory and the real world proves the 
+  understanding of the theory. In your book you provided a “link” to a video 
+  “Donald in Mathemagics”, I did not think it was about Donald Duck, but I confessed 
+  that I really liked and learned from it, all the Greek architecture related to the 
+  golden ratio just amazed me. I also watched the Ted video of  professor Benjamin 
+  and he explains so well how the golden ration is everywhere, nature is a perfect example, 
+  flowers, beehives, etc. 
+  
+    
